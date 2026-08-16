@@ -28,6 +28,22 @@ V2RAY_METRICS_CONFIG = json.dumps(
         },
     }
 )
+NAIVE_CONFIG = json.dumps(
+    {
+        "log": {"disabled": True},
+        "outbounds": [
+            {
+                "type": "naive",
+                "tag": "naive-test",
+                "server": "127.0.0.1",
+                "server_port": 443,
+                "username": "test",
+                "password": "test",
+                "tls": {"enabled": True, "server_name": "example.com"},
+            }
+        ],
+    }
+)
 
 
 def _join_or_terminate(process, timeout=20):
@@ -92,6 +108,12 @@ def test_managed_repeated_lifecycle():
         assert core.running
         core.stop()
         assert not core.running
+
+
+def test_naive_outbound_initializes_cronet():
+    with singbox.SingBox() as core:
+        core.startFromJSON(NAIVE_CONFIG)
+        assert core.running
 
 
 def test_managed_context_manager():

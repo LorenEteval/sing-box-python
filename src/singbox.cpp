@@ -218,6 +218,17 @@ std::string native_version() {
     return take_c_string(singbox_version());
 }
 
+#if defined(SINGBOX_CRONET_SHARED)
+void loadCronetLibrary(const std::string& path) {
+    char* error = nullptr;
+    {
+        py::gil_scoped_release release;
+        error = singbox_load_cronet(const_cast<char*>(path.c_str()));
+    }
+    throw_if_error(error);
+}
+#endif
+
 }  // namespace
 
 PYBIND11_MODULE(_native, module) {
@@ -311,5 +322,13 @@ observed status is platform-dependent. Use SingBox for exception-based,
 non-blocking in-process lifecycle management.
 )doc"
     );
+#if defined(SINGBOX_CRONET_SHARED)
+    module.def(
+        "_loadCronetLibrary",
+        &loadCronetLibrary,
+        py::arg("path"),
+        "Load the wheel-bundled Cronet runtime from an absolute path."
+    );
+#endif
     module.attr("__version__") = native_version();
 }

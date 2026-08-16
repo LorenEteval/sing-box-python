@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import platform
@@ -61,6 +62,7 @@ class BuildSingBox(build_ext):
                 env["GOOS"] = "darwin"
 
         tags = os.environ.get("SINGBOX_BUILD_TAGS", self.default_build_tags())
+        tag_set = set(tags.split(","))
         ldflags = " ".join(
             (
                 f"-X github.com/sagernet/sing-box/constant.Version={UPSTREAM_VERSION}",
@@ -89,6 +91,13 @@ class BuildSingBox(build_ext):
             env=env,
         )
 
+        cronet_artifact = self.cronet_artifact(env, tag_set)
+        shared_cronet = (
+            cronet_artifact
+            if cronet_artifact is not None and cronet_artifact.suffix != ".a"
+            else None
+        )
+
         cmake_args = [
             "cmake",
             "-S",
@@ -105,6 +114,12 @@ class BuildSingBox(build_ext):
             f"-DSINGBOX_ARCHIVE={archive_path.as_posix()}",
             f"-DSINGBOX_INCLUDE_DIR={go_output_dir.as_posix()}",
         ]
+        if cronet_artifact is not None and cronet_artifact.suffix == ".a":
+            cmake_args.append(
+                f"-DSINGBOX_CRONET_ARCHIVE={cronet_artifact.as_posix()}"
+            )
+        if shared_cronet is not None:
+            cmake_args.append("-DSINGBOX_CRONET_SHARED=ON")
         if macos_architecture:
             cmake_args.append(f"-DCMAKE_OSX_ARCHITECTURES={macos_architecture}")
         if platform.system() == "Windows":
@@ -142,6 +157,8 @@ class BuildSingBox(build_ext):
 
         extension_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidates[0], extension_path)
+        if shared_cronet is not None:
+            shutil.copy2(shared_cronet, extension_path.parent / shared_cronet.name)
 
     @staticmethod
     def run_command(command, cwd, env):
@@ -157,14 +174,70 @@ class BuildSingBox(build_ext):
     def default_build_tags():
         if platform.system() == "Windows":
             source = GO_SOURCE_DIR / "release" / "DEFAULT_BUILD_TAGS_WINDOWS"
-        elif platform.system() == "Darwin":
-            source = GO_SOURCE_DIR / "release" / "DEFAULT_BUILD_TAGS"
         else:
-            source = GO_SOURCE_DIR / "release" / "DEFAULT_BUILD_TAGS_OTHERS"
+            source = GO_SOURCE_DIR / "release" / "DEFAULT_BUILD_TAGS"
         tags = source.read_text(encoding="utf-8").strip().split(",")
+        if platform.system() == "Linux" and "with_purego" not in tags:
+            tags.append("with_purego")
         if "with_v2ray_api" not in tags:
             tags.append("with_v2ray_api")
         return ",".join(tags)
+
+    @staticmethod
+    def cronet_artifact(env, tags):
+        if "with_naive_outbound" not in tags:
+            return None
+
+        result = subprocess.run(
+            ["go", "env", "GOOS", "GOARCH"],
+            cwd=str(GO_SOURCE_DIR),
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        target = result.stdout.splitlines()
+        if len(target) != 2:
+            raise RuntimeError(f"Unexpected output from go env: {result.stdout!r}")
+        goos, goarch = target
+        if goos not in {"darwin", "linux", "windows"} or goarch not in {
+            "amd64",
+            "arm64",
+        }:
+            raise RuntimeError(f"Cronet is unsupported for {goos}/{goarch}")
+
+        module = f"github.com/sagernet/cronet-go/lib/{goos}_{goarch}"
+        result = subprocess.run(
+            ["go", "mod", "download", "-json", module],
+            cwd=str(GO_SOURCE_DIR),
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        module_info = json.loads(result.stdout)
+        module_dir = pathlib.Path(module_info["Dir"])
+
+        if goos == "darwin":
+            if "with_purego" in tags:
+                raise RuntimeError(
+                    "The pinned macOS Cronet module provides a static archive; "
+                    "remove with_purego from SINGBOX_BUILD_TAGS"
+                )
+            artifact = module_dir / "libcronet.a"
+        elif goos == "linux":
+            if "with_purego" not in tags:
+                raise RuntimeError(
+                    "Linux Naive builds require with_purego so libcronet.so can "
+                    "be bundled in the wheel"
+                )
+            artifact = module_dir / "libcronet.so"
+        else:
+            artifact = module_dir / "libcronet.dll"
+
+        if not artifact.is_file():
+            raise RuntimeError(f"Cronet artifact is missing from {module}: {artifact}")
+        return artifact
 
     @staticmethod
     def macos_architecture(env):
@@ -199,7 +272,9 @@ setup(
     license="GPL-3.0-or-later",
     python_requires=">=3.8",
     packages=find_packages(),
-    package_data={"singbox": ["py.typed", "_native.pyi"]},
+    package_data={
+        "singbox": ["py.typed", "_native.pyi", "libcronet.dll", "libcronet.so"]
+    },
     include_package_data=True,
     ext_modules=[CMakeExtension("singbox._native")],
     cmdclass={"build_ext": BuildSingBox},

@@ -35,9 +35,30 @@ else()
     if(APPLE)
         target_link_libraries(
             _native PRIVATE
+            "${SINGBOX_CRONET_ARCHIVE}"
+            "-lbsm"
+            "-lpmenergy"
+            "-lpmsample"
+            "-framework AppKit"
+            "-framework ApplicationServices"
+            "-framework CFNetwork"
             "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreServices"
+            "-framework CoreText"
+            "-framework CryptoTokenKit"
+            "-framework Foundation"
+            "-framework IOKit"
+            "-framework LocalAuthentication"
+            "-framework Network"
+            "-framework OpenDirectory"
             "-framework Security"
             "-framework SystemConfiguration"
+            "-framework UniformTypeIdentifiers"
         )
     endif()
+endif()
+
+if(SINGBOX_CRONET_SHARED)
+    target_compile_definitions(_native PRIVATE SINGBOX_CRONET_SHARED=1)
 endif()
