@@ -7,6 +7,7 @@ from . import _native as _native
 if hasattr(_native, "_loadCronetLibrary"):
     _cronet_candidates = (
         _Path(__file__).with_name("libcronet.dll"),
+        _Path(__file__).with_name("libcronet.dylib"),
         _Path(__file__).with_name("libcronet.so"),
     )
     _cronet_path = next(

@@ -97,7 +97,7 @@ class BuildSingBox(build_ext):
         )
 
         cronet_artifact = self.cronet_artifact(env, tag_set)
-        shared_cronet = (
+        downloaded_shared_cronet = (
             cronet_artifact
             if cronet_artifact is not None and cronet_artifact.suffix != '.a'
             else None
@@ -124,7 +124,7 @@ class BuildSingBox(build_ext):
             cmake_args.append(
                 f'-DSINGBOX_CRONET_ARCHIVE={cronet_artifact.as_posix()}'
             )
-        if shared_cronet is not None:
+        if cronet_artifact is not None:
             cmake_args.append('-DSINGBOX_CRONET_SHARED=ON')
         if macos_architecture:
             cmake_args.append(f'-DCMAKE_OSX_ARCHITECTURES={macos_architecture}')
@@ -167,8 +167,19 @@ class BuildSingBox(build_ext):
         extension_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(candidates[0], extension_path)
 
-        if shared_cronet is not None:
-            shutil.copy2(shared_cronet, extension_path.parent / shared_cronet.name)
+        bundled_cronet = downloaded_shared_cronet
+        if platform.system() == 'Darwin' and cronet_artifact is not None:
+            bundled_cronet = native_output_dir / 'libcronet.dylib'
+
+        if bundled_cronet is not None:
+            if not bundled_cronet.is_file():
+                raise RuntimeError(
+                    f'Expected the bundled Cronet runtime at {bundled_cronet}'
+                )
+            shutil.copy2(
+                bundled_cronet,
+                extension_path.parent / bundled_cronet.name,
+            )
 
     @staticmethod
     def run_command(command, cwd, env):
@@ -189,7 +200,7 @@ class BuildSingBox(build_ext):
 
         tags = source.read_text(encoding='utf-8').strip().split(',')
 
-        if platform.system() == 'Linux' and 'with_purego' not in tags:
+        if platform.system() in {'Darwin', 'Linux'} and 'with_purego' not in tags:
             tags.append('with_purego')
         if 'with_v2ray_api' not in tags:
             tags.append('with_v2ray_api')
@@ -235,10 +246,10 @@ class BuildSingBox(build_ext):
         module_dir = pathlib.Path(module_info['Dir'])
 
         if goos == 'darwin':
-            if 'with_purego' in tags:
+            if 'with_purego' not in tags:
                 raise RuntimeError(
-                    'The pinned macOS Cronet module provides a static archive; '
-                    'remove with_purego from SINGBOX_BUILD_TAGS'
+                    'macOS Naive builds require with_purego so Cronet can be '
+                    'isolated from the Python extension C++ runtime'
                 )
 
             artifact = module_dir / 'libcronet.a'
@@ -297,7 +308,13 @@ setup(
     python_requires='>=3.8',
     packages=find_packages(),
     package_data={
-        'singbox': ['py.typed', '_native.pyi', 'libcronet.dll', 'libcronet.so']
+        'singbox': [
+            'py.typed',
+            '_native.pyi',
+            'libcronet.dll',
+            'libcronet.dylib',
+            'libcronet.so',
+        ]
     },
     include_package_data=True,
     ext_modules=[CMakeExtension('singbox._native')],

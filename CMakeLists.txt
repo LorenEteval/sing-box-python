@@ -32,13 +32,22 @@ if(WIN32)
     target_link_libraries(_native PRIVATE "${SINGBOX_ARCHIVE}")
 else()
     target_link_libraries(_native PRIVATE "${SINGBOX_ARCHIVE}" "-lresolv")
-    if(APPLE)
+
+    if(APPLE AND SINGBOX_CRONET_ARCHIVE)
+        # Chromium's archive includes a private libc++/libc++abi. Keep it in a
+        # separate image so its exception runtime cannot interpose pybind11's.
+        add_library(cronet SHARED src/cronet.c)
+        set_target_properties(cronet PROPERTIES OUTPUT_NAME cronet)
+        target_link_options(
+            cronet PRIVATE
+            "-Wl,-force_load,${SINGBOX_CRONET_ARCHIVE}"
+        )
         target_link_libraries(
-            _native PRIVATE
-            "${SINGBOX_CRONET_ARCHIVE}"
+            cronet PRIVATE
             "-lbsm"
             "-lpmenergy"
             "-lpmsample"
+            "-lresolv"
             "-framework AppKit"
             "-framework ApplicationServices"
             "-framework CFNetwork"
@@ -56,6 +65,7 @@ else()
             "-framework SystemConfiguration"
             "-framework UniformTypeIdentifiers"
         )
+        add_dependencies(_native cronet)
     endif()
 endif()
 
