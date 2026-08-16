@@ -147,7 +147,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: deploy-pypi
-      url: https://pypi.org/p/sing-box
+      url: https://pypi.org/p/sing-box-python
     permissions:
       id-token: write
     steps:

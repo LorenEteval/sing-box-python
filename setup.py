@@ -299,7 +299,7 @@ with (ROOT_DIR / 'README.md').open(encoding='utf-8') as readme:
 
 
 setup(
-    name='sing-box',
+    name='sing-box-python',
     version=PACKAGE_VERSION,
     description='Python binding for sing-box',
     long_description=long_description,
