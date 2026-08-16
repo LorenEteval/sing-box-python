@@ -1,0 +1,9 @@
+recursive-include singbox *.py *.pyi py.typed
+recursive-include singbox-go *
+recursive-include src *.cpp
+recursive-include tests *.py
+include CMakeLists.txt
+include LICENSE
+include README.md
+include pyproject.toml
+include setup.py
