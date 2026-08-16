@@ -31,9 +31,10 @@ from a repository checkout:
 pip install .
 ```
 
-The build downloads sing-box's checksum-pinned, platform-specific Cronet Go module automatically. On macOS its static
-archive is linked into the Python extension. Linux and Windows wheels contain `libcronet.so` and `libcronet.dll`
-respectively; the package loads that bundled library by absolute path during import.
+The build downloads sing-box's checksum-pinned, platform-specific Cronet Go module automatically. Wheels contain an
+isolated Cronet runtime (`libcronet.dylib`, `libcronet.so`, or `libcronet.dll`), loaded from an absolute package path
+during import. On macOS the build converts the pinned static archive into a separate dynamic library so Chromium's
+private C++ runtime cannot conflict with pybind11.
 
 ## API
 
@@ -156,9 +157,10 @@ The distributions are built and tested in [GitHub Actions](https://github.com/Lo
 | macOS | Intel | 3.8-3.14, 3.13t, 3.14t |
 | macOS | Apple Silicon | 3.8-3.14, 3.13t, 3.14t |
 
-Naive outbound is included on all wheel platforms in the table. Cronet is statically linked on macOS and bundled as a
-shared runtime on Linux and Windows. The Cronet artifact comes from the platform module and exact version already pinned
-by sing-box v1.13.18's `go.mod` and verified by `go.sum`; the workflow does not build an unrelated Cronet revision.
+Naive outbound is included on all wheel platforms in the table. Cronet is bundled as an isolated shared runtime on
+macOS, Linux, and Windows. The macOS runtime is produced from the pinned static archive during the wheel build. The
+Cronet artifact comes from the platform module and exact version already pinned by sing-box v1.13.18's `go.mod` and
+verified by `go.sum`; the workflow does not build an unrelated Cronet revision.
 Custom source builds can override the complete sing-box tag list with the `SINGBOX_BUILD_TAGS` environment variable.
 
 ## License
