@@ -1,4 +1,4 @@
-# sing-box
+# sing-box-python
 
 [![Build and publish Python distributions](https://github.com/LorenEteval/sing-box-python/actions/workflows/build-and-publish.yml/badge.svg?branch=main)](https://github.com/LorenEteval/sing-box-python/actions/workflows/build-and-publish.yml)
 
@@ -10,7 +10,7 @@ Prebuilt binary wheels include the native Go and C++ binding, so a supported ins
 or a C++ compiler.
 
 ```
-pip install sing-box
+pip install sing-box-python
 ```
 
 Binary wheels are published for Linux x86-64 and ARM64, Windows x86-64 and ARM64, and macOS Intel and Apple Silicon.
