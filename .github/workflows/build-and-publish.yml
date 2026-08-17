@@ -86,12 +86,24 @@ jobs:
           }
           $toolchainBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build and test wheels
+      - name: Build and test supported wheels
+        uses: pypa/cibuildwheel@v4.2.0
+        with:
+          output-dir: wheelhouse
+        env:
+          CIBW_ARCHS: ${{ matrix.arch }}
+
+      # cibuildwheel 4 no longer ships CPython 3.8 or experimental 3.13t
+      # builders. Keep these two established targets on the final release that
+      # supports them; 3.14t and newer free-threaded builds need no opt-in.
+      - name: Build and test CPython 3.8 and 3.13t compatibility wheels
         uses: pypa/cibuildwheel@v3.4.1
         with:
           output-dir: wheelhouse
         env:
           CIBW_ARCHS: ${{ matrix.arch }}
+          CIBW_BUILD: "cp38-* cp313t-*"
+          CIBW_ENABLE: cpython-freethreading
 
       - uses: actions/upload-artifact@v4
         with:
