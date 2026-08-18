@@ -105,7 +105,7 @@ jobs:
           CIBW_BUILD: "cp38-* cp313t-*"
           CIBW_ENABLE: cpython-freethreading
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.name }}
           path: wheelhouse/*.whl
@@ -126,7 +126,7 @@ jobs:
           python -m pip install --upgrade build twine
           python -m build --sdist --outdir dist
           python -m twine check dist/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -146,7 +146,7 @@ jobs:
         with:
           name: sdist
           path: dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-package-distributions
           path: dist/*
