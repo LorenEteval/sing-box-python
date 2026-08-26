@@ -30,27 +30,48 @@ test-command = [
 ]
 
 [tool.cibuildwheel.linux]
-before-all = """
+manylinux-x86_64-image = "manylinux2014"
+manylinux-aarch64-image = "manylinux2014"
+before-all = '''
+go_version="$(
+    awk '
+        $1 == "go" { module_version = $2 }
+        $1 == "toolchain" && $2 != "default" {
+            toolchain_version = $2
+            sub(/^go/, "", toolchain_version)
+        }
+        END {
+            if (toolchain_version != "") print toolchain_version
+            else print module_version
+        }
+    ' "{project}/singbox-go/go.mod"
+)"
+if ! printf '%s\n' "${go_version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+    echo "Invalid Go version in singbox-go/go.mod: ${go_version}" >&2
+    exit 1
+fi
 case "$(uname -m)" in
     x86_64)
         go_arch='amd64'
-        go_sha256='da18191ddb7db8a9339816f3e2b54bdded8047cdc2a5d67059478f8d1595c43f'
         ;;
     aarch64|arm64)
         go_arch='arm64'
-        go_sha256='fd2bccce882e29369f56c86487663bb78ba7ea9e02188a5b0269303a0c3d33ab'
         ;;
     *)
         echo "Unsupported Linux architecture: $(uname -m)" >&2
         exit 1
         ;;
 esac
-go_archive="/tmp/go1.24.7.linux-${go_arch}.tar.gz"
-curl -fsSLo "${go_archive}" "https://go.dev/dl/go1.24.7.linux-${go_arch}.tar.gz"
+go_archive="/tmp/go${go_version}.linux-${go_arch}.tar.gz"
+go_checksum="${go_archive}.sha256"
+go_url="https://dl.google.com/go/go${go_version}.linux-${go_arch}.tar.gz"
+curl -fsSLo "${go_archive}" "${go_url}"
+curl -fsSLo "${go_checksum}" "${go_url}.sha256"
+go_sha256="$(tr -d '\r\n' < "${go_checksum}")"
 echo "${go_sha256}  ${go_archive}" | sha256sum -c -
 tar -C /usr/local -xzf "${go_archive}"
 /usr/local/go/bin/go version
-"""
+'''
 environment = { PATH = "/usr/local/go/bin:$PATH", GOTOOLCHAIN = "local" }
 
 [tool.cibuildwheel.macos]
