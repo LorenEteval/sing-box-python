@@ -226,7 +226,10 @@ jobs:
         with:
           name: python-package-distributions
           path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   github-release:
     name: Upload GitHub release assets
