@@ -245,5 +245,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.finalize-release.outputs.tag }}
         run: |
-          gh release create "$RELEASE_TAG" --repo '${{ github.repository }}' --verify-tag --generate-notes
+          gh release create "$RELEASE_TAG" --repo '${{ github.repository }}' --verify-tag \
+            --notes "Corresponds to sing-box $RELEASE_TAG"
           gh release upload "$RELEASE_TAG" dist/* --repo '${{ github.repository }}'
