@@ -130,19 +130,45 @@ DATA
     __all__ = ['SingBox', 'SingBoxError', '__version__', 'startFromJSON']
 
 VERSION
-    v1.13.18
+    vX.Y.Z
 ```
 
-## Source Code Modification
+## Vendored Upstream Source
 
-This repository, including the package that distributes to pypi,
-contains [sing-box](https://github.com/SagerNet/sing-box) source code and the additional binding code required to build
-the Python extension and its API.
+This repository and its PyPI source distribution contain a vendored copy of
+[sing-box](https://github.com/SagerNet/sing-box). Vendoring keeps source installs independent of Git submodule support.
+All regular files under `singbox-go` come directly from the upstream release except these explicit additions:
 
-To make installation of this package easier, the original [sing-box](https://github.com/SagerNet/sing-box) source code
-is embedded instead of being added as a submodule. The official source files are unchanged. The binding is implemented
-by the added `singbox-go/binding` package and the C++/Python packaging files in this repository. To track the difference,
-compare `singbox-go` with the upstream commit while excluding the added `binding` directory.
+* `singbox-go/binding/main.go`
+* `singbox-go/binding/cronet_purego.go`
+
+Upstream's `clients/android` and `clients/apple` Git submodule links are intentionally not vendored because they are not
+used to build the Python package. The initial Windows import normalized executable bits on upstream shell scripts; file
+paths and blob contents remain identical to upstream. Synchronization runs on Linux and preserves upstream modes.
+
+### Upstream Release Synchronization
+
+`.github/workflows/sync-upstream.yml` checks the latest stable upstream release daily and can also be started manually
+from the Actions page. Drafts and prereleases are rejected. `UPSTREAM_VERSION` is the single version source for both the
+Python distribution version and the sing-box version embedded in the native library, while `UPSTREAM_COMMIT` pins the
+commit to which that release tag resolved during import.
+
+The synchronization script checks the current vendor tree against its exact upstream tag, fetches the requested tag,
+replaces only upstream-owned files, restores the two binding additions, updates `UPSTREAM_VERSION`, and verifies every
+vendored upstream path and Git blob. Repeated checks are no-ops when the stable release is already synchronized.
+
+Run the same operations locally from the repository root:
+
+```shell
+python scripts/sync-sing-box.py check
+python scripts/sync-sing-box.py verify --tag v1.13.18
+python scripts/sync-sing-box.py sync --tag vX.Y.Z
+```
+
+For an automated update, the sync workflow commits `chore: sync sing-box vX.Y.Z` to `main`, then explicitly dispatches
+the existing build-and-publish workflow at that commit. The latter builds and tests every distribution before creating
+the `vX.Y.Z` tag, publishing `X.Y.Z` to PyPI through Trusted Publishing, and creating the GitHub Release. Explicit
+dispatch is required because pushes made with GitHub's `GITHUB_TOKEN` do not trigger new push workflows.
 
 ## Binary Wheel Platforms
 
@@ -159,7 +185,7 @@ The distributions are built and tested in [GitHub Actions](https://github.com/Lo
 
 Naive outbound is included on all wheel platforms in the table. Cronet is bundled as an isolated shared runtime on
 macOS, Linux, and Windows. The macOS runtime is produced from the pinned static archive during the wheel build. The
-Cronet artifact comes from the platform module and exact version already pinned by sing-box v1.13.18's `go.mod` and
+Cronet artifact comes from the platform module and exact version already pinned by the vendored sing-box `go.mod` and
 verified by `go.sum`; the workflow does not build an unrelated Cronet revision.
 Custom source builds can override the complete sing-box tag list with the `SINGBOX_BUILD_TAGS` environment variable.
 

@@ -2,6 +2,7 @@ import json
 import os
 import pathlib
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -13,8 +14,12 @@ from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = pathlib.Path(__file__).parent.resolve()
 GO_SOURCE_DIR = ROOT_DIR / 'singbox-go'
-PACKAGE_VERSION = '1.13.18'
-UPSTREAM_VERSION = 'v1.13.18'
+UPSTREAM_VERSION = (ROOT_DIR / 'UPSTREAM_VERSION').read_text(encoding='utf-8').strip()
+
+if not re.fullmatch(r'v\d+\.\d+\.\d+', UPSTREAM_VERSION):
+    raise RuntimeError(f'Invalid upstream version: {UPSTREAM_VERSION!r}')
+
+PACKAGE_VERSION = UPSTREAM_VERSION[1:]
 
 
 class CMakeExtension(Extension):

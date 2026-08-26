@@ -1,0 +1,90 @@
+name: Synchronize upstream sing-box release
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: Optional stable sing-box tag (defaults to the latest release)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synchronize-upstream-sing-box
+  cancel-in-progress: false
+
+jobs:
+  synchronize:
+    name: Synchronize and dispatch release build
+    if: github.repository == 'LorenEteval/sing-box-python'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      - name: Detect latest stable release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REQUESTED_TAG: ${{ inputs.upstream_tag }}
+        run: |
+          args=(check --github-output "$GITHUB_OUTPUT")
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            args+=(--tag "$REQUESTED_TAG")
+          fi
+          python scripts/sync-sing-box.py "${args[@]}"
+
+      - name: Verify current upstream source integrity
+        if: steps.release.outputs.update_required != 'true'
+        env:
+          CURRENT_TAG: ${{ steps.release.outputs.current_tag }}
+        run: python scripts/sync-sing-box.py verify --tag "$CURRENT_TAG"
+
+      - name: Import upstream release
+        if: steps.release.outputs.update_required == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: python scripts/sync-sing-box.py sync --tag "$RELEASE_TAG"
+
+      - name: Commit synchronized source
+        if: steps.release.outputs.update_required == 'true'
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          git diff --check
+          git add --all -- singbox-go UPSTREAM_COMMIT UPSTREAM_VERSION
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --signoff --message "chore: sync sing-box $RELEASE_TAG"
+          git push origin HEAD:main
+
+      - name: Select release commit
+        if: steps.release.outputs.release_required == 'true'
+        id: release_commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch build and publication workflow
+        if: steps.release.outputs.release_required == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          SYNC_COMMIT: ${{ steps.release_commit.outputs.sha }}
+        run: |
+          gh workflow run build-and-publish.yml \
+            --ref main \
+            --field checkout_ref="$SYNC_COMMIT" \
+            --field release_tag="$RELEASE_TAG"

@@ -4,6 +4,15 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      checkout_ref:
+        description: Exact commit or tag to build instead of the triggering ref
+        required: false
+        type: string
+      release_tag:
+        description: Stable vX.Y.Z tag to create and publish after successful builds
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -39,6 +48,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       # Linux wheels are built in manylinux containers. pyproject.toml installs
       # the pinned Go toolchain inside each container.
@@ -118,6 +128,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.checkout_ref || github.ref }}
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
@@ -152,10 +163,58 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  finalize-release:
+    name: Finalize release tag
+    if: >-
+      ${{ !cancelled() && needs.collect.result == 'success' &&
+          (inputs.release_tag != '' || startsWith(github.ref, 'refs/tags/')) }}
+    runs-on: ubuntu-24.04
+    needs: collect
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Validate new release target
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python scripts/sync-sing-box.py guard-release --tag "$RELEASE_TAG"
+
+      - name: Validate existing release tag
+        if: inputs.release_tag == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          python scripts/sync-sing-box.py guard-release
+          --tag "$RELEASE_TAG" --allow-existing-tag
+
+      - name: Create release tag
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag "$RELEASE_TAG" HEAD
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Export release tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   publish-pypi:
     name: Publish to PyPI
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: collect
+    if: ${{ !cancelled() && needs.finalize-release.result == 'success' }}
+    needs: [collect, finalize-release]
     runs-on: ubuntu-24.04
     environment:
       name: deploy-pypi
@@ -171,8 +230,8 @@ jobs:
 
   github-release:
     name: Upload GitHub release assets
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: publish-pypi
+    if: ${{ !cancelled() && needs.publish-pypi.result == 'success' }}
+    needs: [publish-pypi, finalize-release]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -184,6 +243,7 @@ jobs:
       - name: Create release and upload distributions
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.finalize-release.outputs.tag }}
         run: |
-          gh release create '${{ github.ref_name }}' --repo '${{ github.repository }}' --generate-notes
-          gh release upload '${{ github.ref_name }}' dist/* --repo '${{ github.repository }}'
+          gh release create "$RELEASE_TAG" --repo '${{ github.repository }}' --verify-tag --generate-notes
+          gh release upload "$RELEASE_TAG" dist/* --repo '${{ github.repository }}'

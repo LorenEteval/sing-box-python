@@ -4,6 +4,7 @@ import multiprocessing
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
+from importlib.metadata import version as distribution_version
 
 import pytest
 
@@ -71,7 +72,7 @@ def _listening_config(port):
 
 
 def test_import_version_and_documentation():
-    assert singbox.__version__ == "v1.13.18"
+    assert singbox.__version__ == f"v{distribution_version('sing-box-python')}"
     assert issubclass(singbox.SingBoxError, RuntimeError)
     assert not hasattr(singbox, "start_from_json")
     assert "multiprocessing.Process" in inspect.getdoc(singbox.startFromJSON)
