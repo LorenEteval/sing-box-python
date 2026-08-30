@@ -202,7 +202,7 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag "$RELEASE_TAG" HEAD
+          git tag --annotate "$RELEASE_TAG" --message "$RELEASE_TAG" HEAD
           git push origin "refs/tags/$RELEASE_TAG"
 
       - name: Export release tag
