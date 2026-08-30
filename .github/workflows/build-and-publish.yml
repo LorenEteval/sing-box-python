@@ -249,5 +249,6 @@ jobs:
           RELEASE_TAG: ${{ needs.finalize-release.outputs.tag }}
         run: |
           gh release create "$RELEASE_TAG" --repo '${{ github.repository }}' --verify-tag \
+            --title "$RELEASE_TAG" \
             --notes "Corresponds to sing-box $RELEASE_TAG"
           gh release upload "$RELEASE_TAG" dist/* --repo '${{ github.repository }}'
