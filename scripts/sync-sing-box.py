@@ -28,6 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 VENDOR_DIR = ROOT / "singbox-go"
 VERSION_FILE = ROOT / "UPSTREAM_VERSION"
 COMMIT_FILE = ROOT / "UPSTREAM_COMMIT"
+GO_VERSION_FILE = ROOT / ".go-version"
 UPSTREAM_REPOSITORY = "SagerNet/sing-box"
 UPSTREAM_URL = f"https://github.com/{UPSTREAM_REPOSITORY}.git"
 PROJECT_REPOSITORY = "LorenEteval/sing-box-python"
@@ -73,6 +74,12 @@ LEGACY_NORMALIZED_EXECUTABLES = frozenset(
 )
 VERSION_PATTERN = re.compile(r"v(?P<version>\d+\.\d+\.\d+)\Z")
 COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
+GO_VERSION_PATTERN = re.compile(r"\d+\.\d+\.\d+\Z")
+UPSTREAM_GO_VERSION_PATTERN = re.compile(
+    r"^[ \t]*go-version:[ \t]*['\"]?(?P<version>\d+\.\d+\.\d+)['\"]?"
+    r"[ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
 
 
 class SyncError(RuntimeError):
@@ -145,6 +152,24 @@ def current_commit() -> str:
         raise SyncError(f"Invalid upstream commit: {commit!r}")
 
     return commit
+
+
+def parse_go_version(version: str) -> tuple[int, int, int]:
+    if GO_VERSION_PATTERN.fullmatch(version) is None:
+        raise SyncError(f"Expected an exact X.Y.Z Go version, got {version!r}")
+
+    return tuple(int(part) for part in version.split("."))
+
+
+def current_go_version() -> str:
+    try:
+        version = GO_VERSION_FILE.read_text(encoding="utf-8").strip()
+    except FileNotFoundError as error:
+        raise SyncError(f"Missing Go toolchain file: {GO_VERSION_FILE}") from error
+
+    parse_go_version(version)
+
+    return version
 
 
 def request_json(url: str, *, missing_ok: bool = False) -> Any | None:
@@ -345,6 +370,58 @@ def upstream_tree(
     return blobs, gitlinks
 
 
+def upstream_file(checkout: UpstreamCheckout, path: str) -> str:
+    output = run(
+        ["git", "show", f"{checkout.treeish}:{path}"],
+        cwd=checkout.repository,
+    )
+
+    assert isinstance(output, str)
+
+    return output
+
+
+def go_version_from_workflow(workflow: str) -> str:
+    versions = {
+        match.group("version")
+        for match in UPSTREAM_GO_VERSION_PATTERN.finditer(workflow)
+    }
+
+    if not versions:
+        raise SyncError(
+            "Upstream build workflow contains no exact go-version toolchain pin"
+        )
+    if len(versions) != 1:
+        raise SyncError(
+            "Upstream build workflow contains ambiguous exact Go toolchain pins: "
+            + ", ".join(sorted(versions, key=parse_go_version))
+        )
+
+    version = versions.pop()
+    parse_go_version(version)
+
+    return version
+
+
+def official_go_version(checkout: UpstreamCheckout) -> str:
+    workflow = upstream_file(checkout, ".github/workflows/build.yml")
+
+    return go_version_from_workflow(workflow)
+
+
+def verify_go_version(checkout: UpstreamCheckout) -> None:
+    expected = official_go_version(checkout)
+    actual = current_go_version()
+
+    if actual != expected:
+        raise SyncError(
+            f"Project Go toolchain is {actual}, but upstream {checkout.treeish} "
+            f"builds with {expected}"
+        )
+
+    print(f"Verified Go {actual} against the upstream build workflow")
+
+
 def vendor_files() -> list[str]:
     return sorted(
         path.relative_to(VENDOR_DIR).as_posix()
@@ -466,6 +543,7 @@ def verify_command(args: argparse.Namespace) -> None:
             )
 
         verify_vendor(checkout)
+        verify_go_version(checkout)
 
 
 def safe_extract(archive: pathlib.Path, destination: pathlib.Path) -> None:
@@ -515,6 +593,7 @@ def sync_command(args: argparse.Namespace) -> None:
     ensure_clean_worktree()
 
     current = current_tag()
+    current_go = current_go_version()
     current_version = parse_version(current)
     target_version = parse_version(args.tag)
 
@@ -528,6 +607,7 @@ def sync_command(args: argparse.Namespace) -> None:
             )
 
         verify_vendor(current_checkout)
+        verify_go_version(current_checkout)
     if target_version == current_version:
         print(f"{current} is already synchronized")
 
@@ -536,6 +616,8 @@ def sync_command(args: argparse.Namespace) -> None:
     (ROOT / "build").mkdir(exist_ok=True)
 
     with upstream_checkout(args.tag, args.upstream_dir) as target_checkout:
+        target_go = official_go_version(target_checkout)
+
         with tempfile.TemporaryDirectory(
             prefix="sing-box-import-", dir=ROOT / "build"
         ) as raw:
@@ -561,7 +643,11 @@ def sync_command(args: argparse.Namespace) -> None:
                 COMMIT_FILE.write_text(
                     f"{target_checkout.commit}\n", encoding="utf-8", newline="\n"
                 )
+                GO_VERSION_FILE.write_text(
+                    f"{target_go}\n", encoding="utf-8", newline="\n"
+                )
                 verify_vendor(target_checkout)
+                verify_go_version(target_checkout)
             except BaseException:
                 if VENDOR_DIR.exists():
                     shutil.rmtree(VENDOR_DIR)
@@ -573,6 +659,9 @@ def sync_command(args: argparse.Namespace) -> None:
                 COMMIT_FILE.write_text(
                     f"{current_checkout.commit}\n", encoding="utf-8", newline="\n"
                 )
+                GO_VERSION_FILE.write_text(
+                    f"{current_go}\n", encoding="utf-8", newline="\n"
+                )
 
                 raise
 
@@ -580,6 +669,8 @@ def sync_command(args: argparse.Namespace) -> None:
 
 
 def guard_release(args: argparse.Namespace) -> None:
+    current_go_version()
+
     if current_tag() != args.tag:
         raise SyncError(
             f"Release tag {args.tag} does not match {VERSION_FILE.name} "

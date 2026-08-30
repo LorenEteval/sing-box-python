@@ -20,8 +20,8 @@ Binary wheels are published for Linux x86-64 and ARM64, Windows x86-64 and ARM64
 A source distribution is also published as a fallback. If pip cannot find a compatible wheel, it may build the native
 binding from source. A source build requires:
 
-* The [Go toolchain selected by `singbox-go/go.mod`](https://go.dev/doc/install) in `PATH` (`toolchain` when
-  present, otherwise the `go` directive).
+* The [Go toolchain version recorded in `.go-version`](https://go.dev/doc/install), or a newer compatible release, in
+  `PATH`. The pinned version matches the compiler used by the synchronized upstream release workflow.
 * A working C and C++ compiler toolchain.
 * MinGW-w64 on Windows x86-64, or LLVM-MinGW on Windows ARM64, with `gcc` and `g++` available in `PATH`.
 
@@ -152,11 +152,14 @@ paths and blob contents remain identical to upstream. Synchronization runs on Li
 `.github/workflows/sync-upstream.yml` checks the latest stable upstream release daily and can also be started manually
 from the Actions page. Drafts and prereleases are rejected. `UPSTREAM_VERSION` is the single version source for both the
 Python distribution version and the sing-box version embedded in the native library, while `UPSTREAM_COMMIT` pins the
-commit to which that release tag resolved during import.
+commit to which that release tag resolved during import. The root `.go-version` pins the exact Go compiler used by
+upstream's release workflow; this is intentionally independent of the minimum language version in `singbox-go/go.mod`.
 
 The synchronization script checks the current vendor tree against its exact upstream tag, fetches the requested tag,
-replaces only upstream-owned files, restores the two binding additions, updates `UPSTREAM_VERSION`, and verifies every
-vendored upstream path and Git blob. Repeated checks are no-ops when the stable release is already synchronized.
+replaces only upstream-owned files, restores the two binding additions, updates `UPSTREAM_VERSION`, `UPSTREAM_COMMIT`,
+and `.go-version`, and verifies every vendored upstream path and Git blob. The Go pin is extracted from exact
+`go-version` entries in upstream's build workflow; synchronization fails instead of guessing if no single exact version
+can be identified. Repeated checks are no-ops when the stable release is already synchronized.
 
 Run the same operations locally from the repository root:
 
@@ -166,10 +169,12 @@ python scripts/sync-sing-box.py verify --tag v1.13.18
 python scripts/sync-sing-box.py sync --tag vX.Y.Z
 ```
 
-For an automated update, the sync workflow commits `chore: sync sing-box vX.Y.Z` to `main`, then explicitly dispatches
-the existing build-and-publish workflow at that commit. The latter builds and tests every distribution before creating
-the `vX.Y.Z` tag, publishing `X.Y.Z` to PyPI through Trusted Publishing, and creating the GitHub Release. Explicit
-dispatch is required because pushes made with GitHub's `GITHUB_TOKEN` do not trigger new push workflows.
+For an automated update, the sync workflow installs the synchronized `.go-version` toolchain and compiles the Go
+binding before committing `chore: sync sing-box vX.Y.Z` to `main`. It then explicitly dispatches the existing
+build-and-publish workflow at that commit. The latter uses the same exact Go version for every wheel platform, builds
+and tests every distribution, then creates the `vX.Y.Z` tag, publishes `X.Y.Z` to PyPI through Trusted Publishing, and
+creates the GitHub Release. Explicit dispatch is required because pushes made with GitHub's `GITHUB_TOKEN` do not
+trigger new push workflows.
 
 ## Binary Wheel Platforms
 

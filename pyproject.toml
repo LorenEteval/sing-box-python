@@ -34,20 +34,10 @@ manylinux-x86_64-image = "manylinux2014"
 manylinux-aarch64-image = "manylinux2014"
 before-all = '''
 go_version="$(
-    awk '
-        $1 == "go" { module_version = $2 }
-        $1 == "toolchain" && $2 != "default" {
-            toolchain_version = $2
-            sub(/^go/, "", toolchain_version)
-        }
-        END {
-            if (toolchain_version != "") print toolchain_version
-            else print module_version
-        }
-    ' "{project}/singbox-go/go.mod"
+    tr -d '\r\n' < "{project}/.go-version"
 )"
 if ! printf '%s\n' "${go_version}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-    echo "Invalid Go version in singbox-go/go.mod: ${go_version}" >&2
+    echo "Invalid Go version in .go-version: ${go_version}" >&2
     exit 1
 fi
 case "$(uname -m)" in

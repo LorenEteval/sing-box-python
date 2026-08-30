@@ -51,11 +51,11 @@ jobs:
           ref: ${{ inputs.checkout_ref || github.ref }}
 
       # Linux wheels are built in manylinux containers. pyproject.toml installs
-      # the Go toolchain selected by singbox-go/go.mod inside each container.
+      # the project-pinned Go toolchain inside each container.
       - uses: actions/setup-go@v7
         if: runner.os != 'Linux'
         with:
-          go-version-file: singbox-go/go.mod
+          go-version-file: .go-version
           cache-dependency-path: singbox-go/go.sum
 
       - name: Install MinGW-w64

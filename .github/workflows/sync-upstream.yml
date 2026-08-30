@@ -59,6 +59,37 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: python scripts/sync-sing-box.py sync --tag "$RELEASE_TAG"
 
+      - uses: actions/setup-go@v7
+        if: steps.release.outputs.update_required == 'true'
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: singbox-go/go.sum
+
+      - name: Verify synchronized Go binding compiles
+        if: steps.release.outputs.update_required == 'true'
+        working-directory: singbox-go
+        env:
+          CGO_ENABLED: '1'
+          GOTOOLCHAIN: local
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          expected="$(tr -d '\r\n' < ../.go-version)"
+          actual="$(go env GOVERSION)"
+          if [[ "$actual" != "go$expected" ]]; then
+            echo "Expected Go $expected, found $actual" >&2
+            exit 1
+          fi
+          build_tags="$(tr -d '\r\n' < release/DEFAULT_BUILD_TAGS),with_purego,with_v2ray_api"
+          ldflags="-X github.com/sagernet/sing-box/constant.Version=$RELEASE_TAG $(tr -d '\r\n' < release/LDFLAGS) -s -w -buildid="
+          go build \
+            -o "$RUNNER_TEMP/singbox-binding.a" \
+            -buildmode=c-archive \
+            -buildvcs=false \
+            -trimpath \
+            -tags "$build_tags" \
+            -ldflags "$ldflags" \
+            ./binding
+
       - name: Commit synchronized source
         if: steps.release.outputs.update_required == 'true'
         env:
@@ -67,7 +98,7 @@ jobs:
           # Vendored files stay byte-for-byte identical to upstream and are
           # already validated by the sync script's blob and mode checks.
           git diff --check -- . ':(exclude)singbox-go/**'
-          git add --all -- singbox-go UPSTREAM_COMMIT UPSTREAM_VERSION
+          git add --all -- singbox-go .go-version UPSTREAM_COMMIT UPSTREAM_VERSION
           git diff --cached --check -- . ':(exclude)singbox-go/**'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
