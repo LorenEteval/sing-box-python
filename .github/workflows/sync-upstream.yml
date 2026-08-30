@@ -64,9 +64,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
-          git diff --check
+          # Vendored files stay byte-for-byte identical to upstream and are
+          # already validated by the sync script's blob and mode checks.
+          git diff --check -- . ':(exclude)singbox-go/**'
           git add --all -- singbox-go UPSTREAM_COMMIT UPSTREAM_VERSION
-          git diff --cached --check
+          git diff --cached --check -- . ':(exclude)singbox-go/**'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit --signoff --message "chore: sync sing-box $RELEASE_TAG"
