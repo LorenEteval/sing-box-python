@@ -107,7 +107,7 @@ jobs:
       # builders. Keep these two established targets on the final release that
       # supports them; 3.14t and newer free-threaded builds need no opt-in.
       - name: Build and test CPython 3.8 and 3.13t compatibility wheels
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.2.0
         with:
           output-dir: wheelhouse
         env:
