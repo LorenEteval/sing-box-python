@@ -149,7 +149,7 @@ paths and blob contents remain identical to upstream. Synchronization runs on Li
 
 ### Upstream Release Synchronization
 
-`.github/workflows/sync-upstream.yml` checks the latest stable upstream release daily and can also be started manually
+`.github/workflows/sync-upstream.yml` checks the latest stable upstream release hourly and can also be started manually
 from the Actions page. Drafts and prereleases are rejected. `UPSTREAM_VERSION` is the single version source for both the
 Python distribution version and the sing-box version embedded in the native library, while `UPSTREAM_COMMIT` pins the
 commit to which that release tag resolved during import. The root `.go-version` pins the exact Go compiler used by
