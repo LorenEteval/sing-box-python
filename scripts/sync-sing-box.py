@@ -35,8 +35,10 @@ PROJECT_REPOSITORY = "LorenEteval/sing-box-python"
 PYPI_PROJECT = "sing-box-python"
 PROJECT_ADDITIONS = frozenset(
     {
+        "adapter/binding_traffic.go",
         "binding/cronet_purego.go",
         "binding/main.go",
+        "experimental/clashapi/binding_traffic.go",
     }
 )
 LEGACY_NORMALIZED_MODE_COMMIT = "45ca32dcb966f07f97fc888fe8586e359dbe8405"

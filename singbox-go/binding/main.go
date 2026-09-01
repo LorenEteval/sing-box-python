@@ -26,7 +26,6 @@ import (
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/adapter"
 	CBox "github.com/sagernet/sing-box/constant"
-	"github.com/sagernet/sing-box/experimental/clashapi/trafficontrol"
 	"github.com/sagernet/sing-box/experimental/deprecated"
 	"github.com/sagernet/sing-box/experimental/v2rayapi"
 	"github.com/sagernet/sing-box/include"
@@ -42,7 +41,7 @@ type instance struct {
 	core           *box.Box
 	cancel         context.CancelFunc
 	createdAt      time.Time
-	trafficManager *trafficontrol.Manager
+	trafficManager adapter.BindingTrafficManager
 	v2rayStats     *v2rayapi.StatsService
 	closed         bool
 }
@@ -160,10 +159,8 @@ func activateInstance(loaded *instance) error {
 	}
 
 	if clashServer := service.FromContext[adapter.ClashServer](loaded.context); clashServer != nil {
-		if provider, loadedOK := clashServer.(interface {
-			TrafficManager() *trafficontrol.Manager
-		}); loadedOK {
-			loaded.trafficManager = provider.TrafficManager()
+		if provider, loadedOK := clashServer.(adapter.BindingClashServer); loadedOK {
+			loaded.trafficManager = provider.BindingTrafficManager()
 		}
 	}
 	if v2rayServer := service.FromContext[adapter.V2RayServer](loaded.context); v2rayServer != nil {

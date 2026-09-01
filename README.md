@@ -142,6 +142,12 @@ All regular files under `singbox-go` come directly from the upstream release exc
 
 * `singbox-go/binding/main.go`
 * `singbox-go/binding/cronet_purego.go`
+* `singbox-go/adapter/binding_traffic.go`
+* `singbox-go/experimental/clashapi/binding_traffic.go`
+
+The two `binding_traffic.go` files expose the small traffic-statistics interface needed by the Python binding without
+depending on sing-box's concrete traffic-manager package. This keeps the binding compatible with the package move from
+`experimental/clashapi/trafficontrol` in sing-box 1.13 to `common/trafficcontrol` in sing-box 1.14.
 
 Upstream Git submodule contents are intentionally not vendored. Synchronization discovers and reports gitlinks from
 each release dynamically, so adding an upstream submodule does not require a binding maintenance change. A gitlink that
@@ -159,7 +165,7 @@ commit to which that release tag resolved during import. The root `.go-version` 
 upstream's release workflow; this is intentionally independent of the minimum language version in `singbox-go/go.mod`.
 
 The synchronization script checks the current vendor tree against its exact upstream tag, fetches the requested tag,
-replaces only upstream-owned files, restores the two binding additions, updates `UPSTREAM_VERSION`, `UPSTREAM_COMMIT`,
+replaces only upstream-owned files, restores the binding additions, updates `UPSTREAM_VERSION`, `UPSTREAM_COMMIT`,
 and `.go-version`, and verifies every vendored upstream path and Git blob. The Go pin is extracted from exact
 `go-version` entries in upstream's build workflow; synchronization fails instead of guessing if no single exact version
 can be identified. Repeated checks are no-ops when the stable release is already synchronized.
