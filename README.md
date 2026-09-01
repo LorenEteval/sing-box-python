@@ -32,6 +32,11 @@ from a repository checkout:
 pip install .
 ```
 
+The native build queries the active Go dependency graph with `go list` and forwards every package's `#cgo LDFLAGS`
+to CMake in dependency order. Native system dependencies therefore follow the vendored sing-box version, selected build
+tags, target platform, and architecture instead of being maintained as a separate framework list. Dependencies still
+must be available in the target platform SDK or build environment.
+
 The build downloads sing-box's checksum-pinned, platform-specific Cronet Go module automatically. Wheels contain an
 isolated Cronet runtime (`libcronet.dylib`, `libcronet.so`, or `libcronet.dll`), loaded from an absolute package path
 during import. On macOS the build converts the pinned static archive into a separate dynamic library so Chromium's

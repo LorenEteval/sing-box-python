@@ -5,6 +5,7 @@ import platform
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -32,6 +33,15 @@ class CMakeExtension(Extension):
 class BuildSingBox(build_ext):
     '''Build sing-box as a Go c-archive, then link the Python extension.'''
 
+    CMAKE_GROUPED_LINK_OPTIONS = frozenset(
+        {
+            '-framework',
+            '-lazy_framework',
+            '-reexport_framework',
+            '-weak_framework',
+        }
+    )
+
     def build_extension(self, ext):
         if self.dry_run:
             return
@@ -47,6 +57,7 @@ class BuildSingBox(build_ext):
 
         archive_name = 'singbox.lib' if platform.system() == 'Windows' else 'singbox.a'
         archive_path = go_output_dir / archive_name
+        cgo_link_items_path = go_output_dir / 'cgo-link-items.cmake'
 
         env = os.environ.copy()
         env['CGO_ENABLED'] = '1'
@@ -72,6 +83,12 @@ class BuildSingBox(build_ext):
 
         tags = os.environ.get('SINGBOX_BUILD_TAGS', self.default_build_tags())
         tag_set = set(tags.split(','))
+        cgo_link_items = self.cgo_link_items(env, tags)
+        self.write_cmake_link_items(cgo_link_items_path, cgo_link_items)
+        self.announce(
+            f'Discovered {len(cgo_link_items)} cgo linker items',
+            level=2,
+        )
         ldflags = ' '.join(
             (
                 f'-X github.com/sagernet/sing-box/constant.Version={UPSTREAM_VERSION}',
@@ -123,6 +140,7 @@ class BuildSingBox(build_ext):
             self.pybind11_cmake_argument(),
             f'-DSINGBOX_ARCHIVE={archive_path.as_posix()}',
             f'-DSINGBOX_INCLUDE_DIR={go_output_dir.as_posix()}',
+            f'-DSINGBOX_CGO_LINK_ITEMS_FILE={cgo_link_items_path.as_posix()}',
         ]
 
         if cronet_artifact is not None and cronet_artifact.suffix == '.a':
@@ -181,7 +199,7 @@ class BuildSingBox(build_ext):
                 raise RuntimeError(
                     f'Expected the bundled Cronet runtime at {bundled_cronet}'
                 )
-            shutil.copy2(
+            self.copy_runtime_artifact(
                 bundled_cronet,
                 extension_path.parent / bundled_cronet.name,
             )
@@ -191,10 +209,120 @@ class BuildSingBox(build_ext):
         subprocess.run(command, cwd=str(cwd), env=env, check=True)
 
     @staticmethod
+    def copy_runtime_artifact(source, destination):
+        if destination.exists():
+            destination.chmod(destination.stat().st_mode | stat.S_IWUSR)
+
+        shutil.copyfile(source, destination)
+
+    @staticmethod
     def pybind11_cmake_argument():
         import pybind11
 
         return f'-Dpybind11_DIR={pathlib.Path(pybind11.get_cmake_dir()).as_posix()}'
+
+    @classmethod
+    def cgo_link_items(cls, env, tags):
+        result = subprocess.run(
+            [
+                'go',
+                'list',
+                '-deps',
+                '-json',
+                '-tags',
+                tags,
+                './binding',
+            ],
+            cwd=str(GO_SOURCE_DIR),
+            env=env,
+            check=True,
+            stdout=subprocess.PIPE,
+            encoding='utf-8',
+        )
+        decoder = json.JSONDecoder()
+        offset = 0
+        link_items = []
+
+        while offset < len(result.stdout):
+            while offset < len(result.stdout) and result.stdout[offset].isspace():
+                offset += 1
+            if offset == len(result.stdout):
+                break
+
+            package, offset = decoder.raw_decode(result.stdout, offset)
+            package_name = package.get('ImportPath', '<unknown>')
+            link_items.extend(
+                cls.normalize_cgo_link_flags(
+                    package.get('CgoLDFLAGS', ()),
+                    package_name,
+                )
+            )
+
+        return link_items
+
+    @classmethod
+    def normalize_cgo_link_flags(cls, flags, package_name):
+        link_items = []
+        index = 0
+
+        while index < len(flags):
+            flag = flags[index]
+
+            if not isinstance(flag, str) or not flag:
+                raise RuntimeError(
+                    f'Invalid cgo linker flag from {package_name}: {flag!r}'
+                )
+            if any(character in flag for character in ('\0', '\r', '\n')):
+                raise RuntimeError(
+                    f'Invalid cgo linker flag from {package_name}: {flag!r}'
+                )
+
+            if flag in cls.CMAKE_GROUPED_LINK_OPTIONS:
+                if index + 1 == len(flags):
+                    raise RuntimeError(
+                        f'cgo linker option {flag!r} from {package_name} '
+                        'has no argument'
+                    )
+                argument = flags[index + 1]
+                if not isinstance(argument, str) or not argument:
+                    raise RuntimeError(
+                        f'Invalid argument for cgo linker option {flag!r} '
+                        f'from {package_name}: {argument!r}'
+                    )
+                if any(character in argument for character in ('\0', '\r', '\n')):
+                    raise RuntimeError(
+                        f'Invalid argument for cgo linker option {flag!r} '
+                        f'from {package_name}: {argument!r}'
+                    )
+                link_items.append(f'{flag} {argument}')
+                index += 2
+                continue
+
+            link_items.append(flag)
+            index += 1
+
+        return link_items
+
+    @classmethod
+    def write_cmake_link_items(cls, destination, link_items):
+        lines = [f'set(SINGBOX_CGO_LINK_ITEM_COUNT {len(link_items)})']
+
+        for index, item in enumerate(link_items):
+            lines.append(
+                f'set(SINGBOX_CGO_LINK_ITEM_{index} '
+                f'{cls.cmake_bracket_argument(item)})'
+            )
+
+        destination.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+
+    @staticmethod
+    def cmake_bracket_argument(value):
+        equals = ''
+
+        while f']{equals}]' in value:
+            equals += '='
+
+        return f'[{equals}[{value}]{equals}]'
 
     @staticmethod
     def default_build_tags():
@@ -223,7 +351,7 @@ class BuildSingBox(build_ext):
             env=env,
             check=True,
             capture_output=True,
-            text=True,
+            encoding='utf-8',
         )
         target = result.stdout.splitlines()
 
@@ -245,7 +373,7 @@ class BuildSingBox(build_ext):
             env=env,
             check=True,
             capture_output=True,
-            text=True,
+            encoding='utf-8',
         )
         module_info = json.loads(result.stdout)
         module_dir = pathlib.Path(module_info['Dir'])
