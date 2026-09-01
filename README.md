@@ -143,9 +143,12 @@ All regular files under `singbox-go` come directly from the upstream release exc
 * `singbox-go/binding/main.go`
 * `singbox-go/binding/cronet_purego.go`
 
-Upstream's `clients/android` and `clients/apple` Git submodule links are intentionally not vendored because they are not
-used to build the Python package. The initial Windows import normalized executable bits on upstream shell scripts; file
-paths and blob contents remain identical to upstream. Synchronization runs on Linux and preserves upstream modes.
+Upstream Git submodule contents are intentionally not vendored. Synchronization discovers and reports gitlinks from
+each release dynamically, so adding an upstream submodule does not require a binding maintenance change. A gitlink that
+overlaps a binding-specific file is still rejected, and the pre-release native compile gate prevents publication if a
+new submodule becomes necessary for the binding build. The initial Windows import normalized executable bits on
+upstream shell scripts; file paths and blob contents remain identical to upstream. Synchronization runs on Linux and
+preserves upstream modes.
 
 ### Upstream Release Synchronization
 

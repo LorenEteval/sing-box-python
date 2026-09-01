@@ -39,12 +39,6 @@ PROJECT_ADDITIONS = frozenset(
         "binding/main.go",
     }
 )
-OMITTED_UPSTREAM_GITLINKS = frozenset(
-    {
-        "clients/android",
-        "clients/apple",
-    }
-)
 LEGACY_NORMALIZED_MODE_COMMIT = "45ca32dcb966f07f97fc888fe8586e359dbe8405"
 LEGACY_NORMALIZED_EXECUTABLES = frozenset(
     {
@@ -486,14 +480,27 @@ def verify_file_modes(
         raise SyncError("Modified upstream file modes: " + ", ".join(changed))
 
 
+def project_addition_gitlink_collisions(gitlinks: set[str]) -> list[str]:
+    return sorted(
+        addition
+        for addition in PROJECT_ADDITIONS
+        if any(
+            addition == gitlink
+            or addition.startswith(f"{gitlink}/")
+            or gitlink.startswith(f"{addition}/")
+            for gitlink in gitlinks
+        )
+    )
+
+
 def verify_vendor(checkout: UpstreamCheckout) -> None:
     expected, gitlinks = upstream_tree(checkout)
+    gitlink_collisions = project_addition_gitlink_collisions(gitlinks)
 
-    if gitlinks != OMITTED_UPSTREAM_GITLINKS:
+    if gitlink_collisions:
         raise SyncError(
-            "Upstream gitlinks changed; expected "
-            f"{', '.join(sorted(OMITTED_UPSTREAM_GITLINKS))}; found "
-            f"{', '.join(sorted(gitlinks))}"
+            "Upstream gitlinks overlap project addition paths: "
+            + ", ".join(gitlink_collisions)
         )
 
     collisions = PROJECT_ADDITIONS.intersection(expected)
@@ -532,6 +539,8 @@ def verify_vendor(checkout: UpstreamCheckout) -> None:
         f"Verified {len(upstream_paths)} upstream files against {checkout.commit}; "
         f"allowed additions: {', '.join(sorted(PROJECT_ADDITIONS))}"
     )
+    if gitlinks:
+        print("Omitted upstream gitlinks: " + ", ".join(sorted(gitlinks)))
 
 
 def verify_command(args: argparse.Namespace) -> None:
