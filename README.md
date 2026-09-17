@@ -147,12 +147,6 @@ All regular files under `singbox-go` come directly from the upstream release exc
 
 * `singbox-go/binding/main.go`
 * `singbox-go/binding/cronet_purego.go`
-* `singbox-go/adapter/binding_traffic.go`
-* `singbox-go/experimental/clashapi/binding_traffic.go`
-
-The two `binding_traffic.go` files expose the small traffic-statistics interface needed by the Python binding without
-depending on sing-box's concrete traffic-manager package. This keeps the binding compatible with the package move from
-`experimental/clashapi/trafficontrol` in sing-box 1.13 to `common/trafficcontrol` in sing-box 1.14.
 
 Upstream Git submodule contents are intentionally not vendored. Synchronization discovers and reports gitlinks from
 each release dynamically, so adding an upstream submodule does not require a binding maintenance change. A gitlink that
